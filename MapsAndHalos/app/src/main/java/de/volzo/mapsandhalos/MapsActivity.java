@@ -39,8 +39,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Marker currentPos = mMap.addMarker(new MarkerOptions().position(latLng).title(markerTitle));
             }
         });
-    }
 
+        mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                return false;
+            }
+        });
+    }
 
     /**
      * Manipulates the map once available.
