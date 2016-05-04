@@ -10,6 +10,8 @@ import android.location.LocationManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.util.ArraySet;
+import android.util.Log;
 import android.widget.EditText;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -21,11 +23,18 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
-
+    private static final String TAG = "MyActivity";
     private static final int REQUEST_CODE_LOCATION = 2;
+
+    private static final String MARKER_HANDLE = "MARKER";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,7 +87,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 String markerTitle = etCaptionInput.getText().toString();
                 if (markerTitle.length() > 0) {
                     // see https://developers.google.com/maps/documentation/android-api/marker?hl=de#marker_hinzufugen for hints regarding marker creation
-                    Marker currentPos = addMarkerToMap(mMap, new MarkerOptions().position(latLng).title(markerTitle));
+                    Marker currentPos = addMarkerToMapAndSave(mMap, new MarkerOptions().position(latLng).title(markerTitle));
                 }
             }
 
@@ -90,17 +99,58 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 return false;
             }
         });
+
+        List<MarkerOptions> loadedMaker = loadAllMarker();
+
+        for (MarkerOptions mo : loadedMaker) {
+            addMarkerToMap(mMap, mo);
+        }
+    }
+
+    private List<MarkerOptions> loadAllMarker() {
+        SharedPreferences sharedPref = getPreferences(MODE_PRIVATE);
+
+        Set<String> markerSet = sharedPref.getStringSet(MARKER_HANDLE, new HashSet<String>());
+        List<MarkerOptions> loadedMarker = new ArrayList<MarkerOptions>();
+
+        for (String payload : markerSet) {
+            MarkerOptions mo = deserializeMarkerOption(payload);
+            loadedMarker.add(mo);
+        }
+
+        Log.i(TAG, "loaded marker: " + loadedMarker.size());
+
+        return loadedMarker;
+    }
+
+    private void saveAllMarker(List<MarkerOptions> allMarker) {
+        SharedPreferences sharedPref = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPref.edit();
+
+        Set<String> markerset = new HashSet<String>();
+
+        for (MarkerOptions option : allMarker) {
+            markerset.add(serializeMarkerOption(option));
+        }
+
+        editor.putStringSet(MARKER_HANDLE, markerset);
+        editor.commit();
+
+        Log.i(TAG, "saved marker: " + markerset.size());
     }
 
     private Marker addMarkerToMap(GoogleMap gMap, MarkerOptions options) {
         Marker newMarker = gMap.addMarker(options);
-        SharedPreferences sharedPref = getPreferences(MODE_PRIVATE);
+        return newMarker;
+    }
 
+    private Marker addMarkerToMapAndSave(GoogleMap gMap, MarkerOptions options) {
+        Marker newMarker = addMarkerToMap(gMap, options);
 
-        SharedPreferences.Editor editor = sharedPref.edit();
-        //editor.
-        // editor.putInt(getString(R.string.saved_high_score), newHighScore);
-        // editor.commit();
+        List<MarkerOptions> allMarker = loadAllMarker();
+
+        allMarker.add(options);
+        saveAllMarker(allMarker);
 
         return newMarker;
     }
@@ -155,6 +205,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             return;
         }
         Location location = locationManager.getLastKnownLocation(provider);
+        if (location == null) return;
 
         CameraPosition cameraPosition = new CameraPosition.Builder()
                 .target(new LatLng(location.getLatitude(), location.getLongitude()))      // Sets the center of the map to location user
@@ -165,10 +216,25 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private String serializeMarkerOption(MarkerOptions mo) {
         String title = mo.getTitle();
-        String longt = Double.toString(mo.getPosition().longitude);
-        String latt = Double.toString(mo.getPosition().latitude);
+        String lat = Double.toString(mo.getPosition().latitude);
+        String lon = Double.toString(mo.getPosition().longitude);
 
-        return title + ";" + longt + ";" + latt;
+        return title + ";" + lat + ";" + lon;
+    }
+
+    private MarkerOptions deserializeMarkerOption(String payload) {
+        MarkerOptions mo = new MarkerOptions();
+
+        String[] snips = payload.split(";");
+
+        String title = snips[0];
+        Double lat = Double.parseDouble(snips[1]);
+        Double lon = Double.parseDouble(snips[2]);
+
+        mo.title(title);
+        mo.position(new LatLng(lat, lon));
+
+        return mo;
     }
     
 }
