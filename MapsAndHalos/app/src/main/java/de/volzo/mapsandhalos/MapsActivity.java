@@ -4,6 +4,8 @@ import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.drawable.shapes.Shape;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
@@ -19,9 +21,13 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.VisibleRegion;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -35,6 +41,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static final int REQUEST_CODE_LOCATION = 2;
 
     private static final String MARKER_HANDLE = "MARKER";
+
+    private List<MarkerOptions> globalMarker = new ArrayList<MarkerOptions>();
+    private List<Circle> globalCircles = new ArrayList<Circle>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +66,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * installed Google Play services and returned to the app.
      */
     @Override
-    public void onMapReady(GoogleMap googleMap) {
+    public void onMapReady(final GoogleMap googleMap) {
         mMap = googleMap;
 
         // Getting LocationManager object from System Service LOCATION_SERVICE
@@ -105,6 +114,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         for (MarkerOptions mo : loadedMaker) {
             addMarkerToMap(mMap, mo);
         }
+
+        drawHalos(googleMap);
+
+        mMap.setOnCameraChangeListener(new GoogleMap.OnCameraChangeListener() {
+            @Override
+            public void onCameraChange(CameraPosition cameraPosition) {
+                drawHalos(googleMap);
+            }
+        });
     }
 
     private List<MarkerOptions> loadAllMarker() {
@@ -119,6 +137,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 
         Log.i(TAG, "loaded marker: " + loadedMarker.size());
+
+        globalMarker = loadedMarker;
 
         return loadedMarker;
     }
@@ -136,11 +156,61 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         editor.putStringSet(MARKER_HANDLE, markerset);
         editor.commit();
 
+        globalMarker = allMarker;
+
         Log.i(TAG, "saved marker: " + markerset.size());
+    }
+
+    private void drawHalos(GoogleMap gMap) {
+
+        for (Circle circle : globalCircles) {
+            circle.remove();
+        }
+
+        VisibleRegion region = mMap.getProjection().getVisibleRegion();
+        LatLngBounds bounds = region.latLngBounds;
+
+        Location northEast = new Location("northEast");
+        northEast.setLatitude(region.latLngBounds.northeast.latitude);
+        northEast.setLongitude(region.latLngBounds.northeast.longitude);
+        Location southWest = new Location("southWest");
+        southWest.setLatitude(region.latLngBounds.southwest.latitude);
+        southWest.setLongitude(region.latLngBounds.southwest.longitude);
+
+        float screenDiag = northEast.distanceTo(southWest);
+
+        for (MarkerOptions mo : globalMarker) {
+
+            // is the Marker on the screen?
+            if (bounds.contains(mo.getPosition())) continue;
+
+            LatLng cameraPosition = mMap.getCameraPosition().target;
+            Location camera = new Location("l1");
+            camera.setLatitude(cameraPosition.latitude);
+            camera.setLongitude(cameraPosition.longitude);
+            Location marker = new Location("l2");
+            marker.setLatitude(mo.getPosition().latitude);
+            marker.setLongitude(mo.getPosition().longitude);
+
+            float circleRadius = (float) (camera.distanceTo(marker) - screenDiag/3);
+
+            if (circleRadius < 0) continue;
+
+            // Instantiates a new CircleOptions object and defines the center and radius
+            CircleOptions circleOptions = new CircleOptions()
+                    .center(mo.getPosition())
+                    .strokeColor(Color.RED)
+                    .radius(circleRadius); // In meters
+
+            // Get back the mutable Circle
+            Circle circle = gMap.addCircle(circleOptions);
+            globalCircles.add(circle);
+        }
     }
 
     private Marker addMarkerToMap(GoogleMap gMap, MarkerOptions options) {
         Marker newMarker = gMap.addMarker(options);
+
         return newMarker;
     }
 
@@ -236,5 +306,5 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         return mo;
     }
-    
+
 }
